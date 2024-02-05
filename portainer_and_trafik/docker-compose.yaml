@@ -93,25 +93,11 @@ services:
     networks:
       - frontend
 
-  uptime-kuma:
-    image: louislam/uptime-kuma:latest
-    container_name: uptime-kuma
-    ports:
-      - "3001:3001"  # <Host Port>:<Container Port> SHOULD BE THE SAME WHEN RUNNING A PROXY
-    restart: always
-    
-    networks:
-      - backend
-    #allow uptime to acces the docker containers
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - uptime_kuma:/app/data
-
   twingate_connector:
     container_name: twingate_connector
     image: twingate/connector:latest
     environment:
-      - TWINGATE_NETWORK=gogartyit
+      - TWINGATE_NETWORK=A_NETWORK_NAME
       - TWINGATE_ACCESS_TOKEN=${TWINGATE_ACCESS_TOKEN}
       - TWINGATE_REFRESH_TOKEN=${TWINGATE_REFRESH_TOKEN}
       # -- (Optional) Change loglevel
@@ -126,9 +112,6 @@ services:
     restart: unless-stopped
 
 volumes:
-
-  jwt_volume:
-
   localtime_volume:
   portainer_data:
   data:
