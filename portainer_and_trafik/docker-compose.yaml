@@ -1,0 +1,135 @@
+version: '3.9'
+#this is a test comment from VS code
+networks:
+  frontend:
+    external: true
+  backend:
+    external: true
+  proxy:
+    name: proxy
+    external: true
+
+services:
+
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    restart: unless-stopped
+#    security_opt:
+#      - no-new-privileges:true
+# -- (Optional) When using a custom network
+    networks:
+       proxy:
+    ports:
+      - 80:80
+      - 443:443
+      # -- (Optional) Enable Dashboard, don't do in production if you do not have password protedted. 
+      - 8080:8080
+    environment:
+      - CF_API_EMAIL=$YOU_EMAIL
+      - CF_DNS_API_TOKEN=$CF_DNS_API_TOKEN
+
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /home/jgogarty/docker-compose/traefik/traefik.yaml:/traefik.yml:ro
+      - /home/jgogarty/docker-compose/traefik/acme.json:/acme.json
+      - /home/jgogarty/docker-compose/traefik/config.yml:/config.yml:ro
+      - /home/jgogarty/docker-compose/traefik/logs:/var/log/traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.entrypoints=web"
+      - "traefik.http.routers.traefik.rule=Host(`traefik-dashboard.YOUR_URL`)"
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=USERNAME:PASSWORD"
+      - "traefik.http.middlewares.traefik-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.sslheader.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.routers.traefik.middlewares=traefik-https-redirect"
+      - "traefik.http.routers.traefik-secure.entrypoints=websecure"
+      - "traefik.http.routers.traefik-secure.rule=Host(`traefik-dashboard.YOUR_URL`)"
+      - "traefik.http.routers.traefik-secure.middlewares=traefik-auth"
+      - "traefik.http.routers.traefik-secure.tls=true"
+      - "traefik.http.routers.traefik-secure.tls.certresolver=cloudflare"
+      - "traefik.http.routers.traefik-secure.tls.domains[0].main=$YOUR_URL"
+      - "traefik.http.routers.traefik-secure.tls.domains[0].sans=*.YOUR_URL"
+      - "traefik.http.routers.traefik-secure.service=api@internal"
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - 9000:9000
+#    security_opt:
+#      - no-new-privileges:true
+    networks:
+      - proxy
+    volumes:
+      - localtime_volume:/etc/localtime:ro
+      - data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.entrypoints=web"
+      - "traefik.http.routers.portainer.rule=Host(`portainer.YOUR_URL`)"
+      - "traefik.http.middlewares.portainer-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.portainer.middlewares=portainer-https-redirect"
+      - "traefik.http.routers.portainer-secure.entrypoints=websecure"
+      - "traefik.http.routers.portainer-secure.rule=Host(`portainer.YOUR_URL`)"
+      - "traefik.http.routers.portainer-secure.tls=true"
+      - "traefik.http.routers.portainer-secure.service=portainer"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+      - "traefik.docker.network=proxy"
+ 
+  cloudflaretunnel:
+    container_name: "cloudflaretunnel"
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    environment:
+      - TUNNEL_TOKEN=$CLOUDFLARE_API_TOKEN
+    command: tunnel --no-autoupdate run
+
+    #networks that will be exposed to the cloudflare tunnel
+    networks:
+      - frontend
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    ports:
+      - "3001:3001"  # <Host Port>:<Container Port> SHOULD BE THE SAME WHEN RUNNING A PROXY
+    restart: always
+    
+    networks:
+      - backend
+    #allow uptime to acces the docker containers
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - uptime_kuma:/app/data
+
+  twingate_connector:
+    container_name: twingate_connector
+    image: twingate/connector:latest
+    environment:
+      - TWINGATE_NETWORK=gogartyit
+      - TWINGATE_ACCESS_TOKEN=${TWINGATE_ACCESS_TOKEN}
+      - TWINGATE_REFRESH_TOKEN=${TWINGATE_REFRESH_TOKEN}
+      # -- (Optional) Change loglevel
+      - TWINGATE_LOG_LEVEL=3
+      # -- (Optional) Add custom DNS Server
+#      - TWINGATE_DNS=192.168.0.10
+    sysctls:
+      net.ipv4.ping_group_range: "0 2147483647"
+    # -- (Optional) When using a custom network
+    networks:
+     - frontend
+    restart: unless-stopped
+
+volumes:
+
+  jwt_volume:
+
+  localtime_volume:
+  portainer_data:
+  data:
+
